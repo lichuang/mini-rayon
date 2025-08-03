@@ -1,0 +1,12 @@
+[package]
+name = "mini-rayon"
+version = "0.1.0"
+edition = "2024"
+homepage = "https://github.com/lichuang/mini-rayon"
+keywords = ["parallel", "thread", "concurrency", "join", "performance"]
+categories = ["concurrency"]
+license = "Apache-2.0"
+repository = "https://github.com/lichuang/mini-rayon"
+readme = "README.md"
+
+[dependencies]
