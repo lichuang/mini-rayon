@@ -1,11 +1,13 @@
+use std::mem;
+use std::ptr;
 use std::slice;
 
 use crate::ParallelIterator;
-use crate::bridge;
 use crate::iter::IntoParallelIteratorator;
 use crate::plumbing::Consumer;
 use crate::plumbing::Producer;
 use crate::plumbing::ProducerCallback;
+use crate::plumbing::bridge;
 
 impl<T> IntoParallelIteratorator for Vec<T> {
   type Item = T;
@@ -29,7 +31,7 @@ impl<T> ParallelIterator for IntoIter<T> {
 
   fn drive<C>(self, consumer: C) -> C::Result
   where C: Consumer<Self::Item> {
-    bridge::bridge(self, consumer)
+    bridge(self, consumer)
   }
 
   fn with_producer<CB: ProducerCallback<Self::Item>>(mut self, callback: CB) -> CB::Output {
@@ -54,6 +56,36 @@ impl<T> DrainProducer<'_, T> {
   }
 }
 
-impl<T> Producer for DrainProducer<'_, T> {
+impl<'data, T> Producer for DrainProducer<'data, T> {
   type Item = T;
+  type IntoIter = SliceDrain<'data, T>;
+
+  fn into_iter(mut self) -> Self::IntoIter {
+    let slice = mem::take(&mut self.slice);
+    SliceDrain {
+      iter: slice.iter_mut(),
+    }
+  }
+}
+
+// like std::vec::Drain, without updating a source Vec
+pub struct SliceDrain<'data, T> {
+  iter: slice::IterMut<'data, T>,
+}
+
+impl<'data, T: 'data> Iterator for SliceDrain<'data, T> {
+  type Item = T;
+
+  fn next(&mut self) -> Option<T> {
+    let ptr: *const T = self.iter.next()?;
+    Some(unsafe { ptr::read(ptr) })
+  }
+
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    self.iter.size_hint()
+  }
+
+  fn count(self) -> usize {
+    self.iter.len()
+  }
 }
