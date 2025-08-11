@@ -10,3 +10,5 @@ repository = "https://github.com/lichuang/mini-rayon"
 readme = "README.md"
 
 [dependencies]
+anyhow = "1"
+crossbeam-deque = "0.8.1"

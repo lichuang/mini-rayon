@@ -14,7 +14,7 @@ pub trait ParallelIterator: Sized {
 
   fn for_each<Op>(self, op: Op)
   where Op: Fn(Self::Item) {
-    for_each::for_each(self, op);
+    for_each(self, op);
   }
 
   fn len(&self) -> usize;

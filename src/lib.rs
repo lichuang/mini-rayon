@@ -1,7 +1,8 @@
-mod for_each;
+mod containers;
+mod functions;
 mod iter;
 mod plumbing;
-mod vec;
+mod thread;
 
-pub(crate) use for_each::for_each;
+pub(crate) use functions::for_each;
 pub use iter::ParallelIterator;
