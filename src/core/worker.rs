@@ -1,14 +1,12 @@
 use std::cell::Cell;
 use std::ptr;
+use std::sync::Arc;
 
+use crossbeam_deque::Stealer;
 use crossbeam_deque::Worker;
 
 use super::job::JobRef;
-
-pub struct ThreadBuilder {
-  worker: Worker<JobRef>,
-  index: usize,
-}
+use super::registry::Registry;
 
 thread_local! {
     static WORKER_THREAD_STATE: Cell<*const WorkerThread> = const { Cell::new(ptr::null()) };
@@ -16,16 +14,12 @@ thread_local! {
 
 pub struct WorkerThread {
   worker: Worker<JobRef>,
-  index: usize,
-}
 
-impl From<ThreadBuilder> for WorkerThread {
-  fn from(thread: ThreadBuilder) -> Self {
-    Self {
-      worker: thread.worker,
-      index: thread.index,
-    }
-  }
+  stealer: Stealer<JobRef>,
+
+  index: usize,
+
+  registry: Arc<Registry>,
 }
 
 impl Drop for WorkerThread {
@@ -39,6 +33,21 @@ impl Drop for WorkerThread {
 }
 
 impl WorkerThread {
+  pub fn new(worker: Worker<JobRef>, registry: Arc<Registry>, index: usize) -> Self {
+    Self {
+      stealer: worker.stealer(),
+      worker,
+      registry: registry,
+      index: index,
+    }
+  }
+
+  pub fn spawn(self) {
+    unsafe {
+      main_loop(self);
+    }
+  }
+
   /// Gets the `WorkerThread` index for the current thread; returns
   /// NULL if this is not a worker thread. This pointer is valid
   /// anywhere on the current thread.
@@ -54,3 +63,5 @@ impl WorkerThread {
     });
   }
 }
+
+unsafe fn main_loop(worker: WorkerThread) {}

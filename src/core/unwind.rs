@@ -1,0 +1,22 @@
+use std::any::Any;
+use std::panic::AssertUnwindSafe;
+use std::panic::{self};
+use std::thread;
+
+pub(super) fn halt_unwinding<F, R>(func: F) -> thread::Result<R>
+where F: FnOnce() -> R {
+  panic::catch_unwind(AssertUnwindSafe(func))
+}
+
+pub(super) fn resume_unwinding(payload: Box<dyn Any + Send>) -> ! {
+  panic::resume_unwind(payload)
+}
+
+pub(super) struct AbortIfPanic;
+
+impl Drop for AbortIfPanic {
+  fn drop(&mut self) {
+    eprintln!("Rayon: detected unexpected panic; aborting");
+    ::std::process::abort();
+  }
+}

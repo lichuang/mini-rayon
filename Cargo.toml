@@ -12,3 +12,4 @@ readme = "README.md"
 [dependencies]
 anyhow = "1"
 crossbeam-deque = "0.8.1"
+crossbeam-utils = "0.8.0"
