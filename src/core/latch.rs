@@ -1,9 +1,13 @@
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+
+use super::registry::Registry;
+use super::worker::WorkerThread;
 
 pub trait Latch {
   unsafe fn set(this: *const Self);
@@ -98,6 +102,69 @@ impl Latch for LockLatch {
       let mut guand = (*this).m.lock().unwrap();
       *guand = true;
       (*this).v.notify_all();
+    }
+  }
+}
+
+pub struct SpinLatch<'r> {
+  core_latch: CoreLatch,
+  registry: &'r Arc<Registry>,
+  target_worker_index: usize,
+  cross: bool,
+}
+
+impl<'r> SpinLatch<'r> {
+  pub fn new(thread: &'r WorkerThread) -> SpinLatch<'r> {
+    SpinLatch {
+      core_latch: CoreLatch::new(),
+      registry: thread.registry(),
+      target_worker_index: thread.index(),
+      cross: false,
+    }
+  }
+
+  #[inline]
+  pub(super) fn probe(&self) -> bool {
+    self.core_latch.probe()
+  }
+}
+
+impl<'r> AsCoreLatch for SpinLatch<'r> {
+  fn as_core_latch(&self) -> &CoreLatch {
+    &self.core_latch
+  }
+}
+
+impl<'r> Latch for SpinLatch<'r> {
+  #[inline]
+  unsafe fn set(this: *const Self) {
+    let cross_registry;
+
+    let registry: &Registry = if (*this).cross {
+      // Ensure the registry stays alive while we notify it.
+      // Otherwise, it would be possible that we set the spin
+      // latch and the other thread sees it and exits, causing
+      // the registry to be deallocated, all before we get a
+      // chance to invoke `registry.notify_worker_latch_is_set`.
+      cross_registry = Arc::clone((*this).registry);
+      &cross_registry
+    } else {
+      // If this is not a "cross-registry" spin-latch, then the
+      // thread which is performing `set` is itself ensuring
+      // that the registry stays alive. However, that doesn't
+      // include this *particular* `Arc` handle if the waiting
+      // thread then exits, so we must completely dereference it.
+      (*this).registry
+    };
+    let target_worker_index = (*this).target_worker_index;
+
+    // NOTE: Once we `set`, the target may proceed and invalidate `this`!
+    if CoreLatch::set(&(*this).core_latch) {
+      // Subtle: at this point, we can no longer read from
+      // `self`, because the thread owning this spin latch may
+      // have awoken and deallocated the latch. Therefore, we
+      // only use fields whose values we already read.
+      registry.notify_worker_latch_is_set(target_worker_index);
     }
   }
 }

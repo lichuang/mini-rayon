@@ -3,7 +3,7 @@ use std::panic::AssertUnwindSafe;
 use std::panic::{self};
 use std::thread;
 
-pub(super) fn halt_unwinding<F, R>(func: F) -> thread::Result<R>
+pub fn halt_unwinding<F, R>(func: F) -> thread::Result<R>
 where F: FnOnce() -> R {
   panic::catch_unwind(AssertUnwindSafe(func))
 }

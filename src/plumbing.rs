@@ -1,6 +1,7 @@
 use std::iter::Product;
 
 use crate::ParallelIterator;
+use crate::core::current_num_threads;
 
 pub trait ProducerCallback<T> {
   type Output;
@@ -9,17 +10,90 @@ pub trait ProducerCallback<T> {
   where P: Producer<Item = T>;
 }
 
-pub trait Producer {
+pub trait Producer: Sized {
   type Item;
   type IntoIter: Iterator<Item = Self::Item>;
 
   fn into_iter(self) -> Self::IntoIter;
+
+  fn split_at(self, index: usize) -> (Self, Self);
 }
 
-pub trait Consumer<Item> {
+pub trait Consumer<Item>: Sized {
   type Result;
 
+  type Reducer: Reducer<Self::Result>;
+
   fn full(&self) -> bool;
+
+  fn split_at(self, index: usize) -> (Self, Self, Self::Reducer);
+}
+
+pub trait Reducer<Result> {
+  /// Reduce two final results into one; this is executed after a
+  /// split.
+  fn reduce(self, left: Result, right: Result) -> Result;
+}
+
+struct Splitter {
+  splits: usize,
+}
+
+impl Splitter {
+  #[inline]
+  fn new() -> Splitter {
+    Splitter {
+      splits: current_num_threads(),
+    }
+  }
+
+  #[inline]
+  fn try_split(&mut self, stolen: bool) -> bool {
+    let Splitter { splits } = *self;
+
+    if stolen {
+      // This job was stolen!  Reset the number of desired splits to the
+      // thread count, if that's more than we had remaining anyway.
+      self.splits = Ord::max(current_num_threads(), self.splits / 2);
+      true
+    } else if splits > 0 {
+      // We have splits remaining, make it so.
+      self.splits /= 2;
+      true
+    } else {
+      // Not stolen, and no more splits -- we're done!
+      false
+    }
+  }
+}
+
+struct LengthSplitter {
+  inner: Splitter,
+
+  min: usize,
+}
+
+impl LengthSplitter {
+  #[inline]
+  fn new(min: usize, max: usize, len: usize) -> LengthSplitter {
+    let mut splitter = LengthSplitter {
+      inner: Splitter::new(),
+      min: Ord::max(min, 1),
+    };
+
+    let min_splits = len / Ord::max(max, 1);
+
+    if min_splits > splitter.inner.splits {
+      splitter.inner.splits = min_splits;
+    }
+
+    splitter
+  }
+
+  #[inline]
+  fn try_split(&mut self, len: usize, stolen: bool) -> bool {
+    len / 2 >= self.min && self.inner.try_split(stolen)
+  }
 }
 
 pub fn bridge<I, C>(pi: I, consumer: C) -> C::Result
@@ -52,5 +126,44 @@ where
   P: Producer,
   C: Consumer<P::Item>,
 {
-  unimplemented!()
+  fn helper<P, C>(
+    len: usize,
+    migrated: bool,
+    mut splitter: LengthSplitter,
+    producer: P,
+    consumer: C,
+  ) -> C::Result
+  where
+    P: Producer,
+    C: Consumer<P::Item>,
+  {
+    if consumer.full() {
+      unimplemented!()
+    }
+    if splitter.try_split(len, migrated) {
+      let mid = len / 2;
+      let (left_producer, right_producer) = producer.split_at(mid);
+      let (left_consumer, right_consumer, reducer) = consumer.split_at(mid);
+      let (left_result, right_result) = join_context(
+        |context| {
+          helper(
+            mid,
+            context.migrated(),
+            splitter,
+            left_producer,
+            left_consumer,
+          )
+        },
+        |context| {
+          helper(
+            len - mid,
+            context.migrated(),
+            splitter,
+            right_producer,
+            right_consumer,
+          )
+        },
+      );
+    }
+  }
 }

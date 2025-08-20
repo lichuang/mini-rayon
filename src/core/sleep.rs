@@ -164,6 +164,10 @@ impl Sleep {
     latch.wake_up();
   }
 
+  pub(super) fn new_internal_jobs(&self, num_jobs: u32, queue_was_empty: bool) {
+    self.new_jobs(num_jobs, queue_was_empty)
+  }
+
   pub fn new_injected_jobs(&self, num_jobs: u32, queue_was_empty: bool) {
     std::sync::atomic::fence(Ordering::SeqCst);
 
@@ -220,6 +224,10 @@ impl Sleep {
     } else {
       false
     }
+  }
+
+  pub(super) fn notify_worker_latch_is_set(&self, target_worker_index: usize) {
+    self.wake_specific_thread(target_worker_index);
   }
 }
 

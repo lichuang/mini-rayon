@@ -4,6 +4,7 @@ use std::sync::Once;
 
 use anyhow::Result;
 use crossbeam_deque::Injector;
+use crossbeam_deque::Steal;
 use crossbeam_deque::Stealer;
 use crossbeam_deque::Worker;
 
@@ -21,7 +22,7 @@ pub struct ThreadPoolBuilder {
 
 impl Default for ThreadPoolBuilder {
   fn default() -> Self {
-    ThreadPoolBuilder { num_threads: 2 }
+    ThreadPoolBuilder { num_threads: 10 }
   }
 }
 
@@ -35,7 +36,7 @@ struct ThreadInfo {
 
   terminate: OnceLatch,
 
-  stealer: Stealer<JobRef>,
+  pub stealer: Stealer<JobRef>,
 }
 
 impl ThreadInfo {
@@ -50,9 +51,9 @@ impl ThreadInfo {
 }
 
 pub struct Registry {
-  thread_infos: Vec<ThreadInfo>,
+  pub thread_infos: Vec<ThreadInfo>,
   injected_jobs: Injector<JobRef>,
-  sleep: Sleep,
+  pub sleep: Sleep,
 }
 
 impl Registry {
@@ -124,6 +125,35 @@ impl Registry {
       job.into_result()
     })
   }
+
+  pub fn num_threads(&self) -> usize {
+    self.thread_infos.len()
+  }
+
+  pub fn current_num_threads() -> usize {
+    unsafe {
+      let worker_thread = WorkerThread::current();
+      if worker_thread.is_null() {
+        global_registry().num_threads()
+      } else {
+        (*worker_thread).registry.num_threads()
+      }
+    }
+  }
+
+  pub fn notify_worker_latch_is_set(&self, target_worker_index: usize) {
+    self.sleep.notify_worker_latch_is_set(target_worker_index);
+  }
+
+  pub fn pop_injected_job(&self) -> Option<JobRef> {
+    loop {
+      match self.injected_jobs.steal() {
+        Steal::Success(job) => return Some(job),
+        Steal::Empty => return None,
+        Steal::Retry => {}
+      }
+    }
+  }
 }
 
 fn default_global_registry() -> Result<Arc<Registry>> {
@@ -167,4 +197,8 @@ where
       op(&*worker, false)
     }
   }
+}
+
+pub fn current_num_threads() -> usize {
+  Registry::current_num_threads()
 }

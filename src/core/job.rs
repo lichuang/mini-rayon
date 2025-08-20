@@ -21,22 +21,30 @@ pub struct JobRef {
 }
 
 impl JobRef {
-  /// Unsafe: caller asserts that `data` will remain valid until the
-  /// job is executed.
-  pub(super) unsafe fn new<T>(data: *const T) -> JobRef
+  pub unsafe fn new<T>(data: *const T) -> JobRef
   where T: Job {
-    // erase types:
     JobRef {
       pointer: data as *const (),
       execute_fn: <T as Job>::execute,
     }
   }
+
+  pub fn id(&self) -> impl Eq {
+    (self.pointer, self.execute_fn)
+  }
+
+  pub unsafe fn execute(&self) {
+    (self.execute_fn)(self.pointer)
+  }
 }
+
+unsafe impl Send for JobRef {}
+unsafe impl Sync for JobRef {}
 
 pub struct StackJob<L, F, R>
 where
-  L: Latch,
-  F: FnOnce(bool) -> R,
+  L: Latch + Sync,
+  F: FnOnce(bool) -> R + Send,
   R: Send,
 {
   pub latch: L,
@@ -50,7 +58,7 @@ where
   F: FnOnce(bool) -> R + Send,
   R: Send,
 {
-  pub(super) fn new(func: F, latch: L) -> StackJob<L, F, R> {
+  pub fn new(func: F, latch: L) -> StackJob<L, F, R> {
     StackJob {
       latch,
       func: UnsafeCell::new(Some(func)),
@@ -58,11 +66,15 @@ where
     }
   }
 
-  pub(super) unsafe fn as_job_ref(&self) -> JobRef {
+  pub unsafe fn as_job_ref(&self) -> JobRef {
     JobRef::new(self)
   }
 
-  pub(super) unsafe fn into_result(self) -> R {
+  pub(super) unsafe fn run_inline(self, stolen: bool) -> R {
+    self.func.into_inner().unwrap()(stolen)
+  }
+
+  pub unsafe fn into_result(self) -> R {
     self.result.into_inner().into_return_value()
   }
 }
