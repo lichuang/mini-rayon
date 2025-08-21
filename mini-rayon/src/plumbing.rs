@@ -1,8 +1,6 @@
-use anyhow::Result;
-
-use crate::ParallelIterator;
 use crate::core::current_num_threads;
 use crate::core::join_context;
+use crate::iter::ParallelIterator;
 
 pub trait ProducerCallback<T> {
   type Output;
@@ -25,6 +23,11 @@ pub trait Producer: Sized + Send {
 
   fn max_len(&self) -> usize {
     usize::MAX
+  }
+
+  fn fold_with<F>(self, folder: F) -> F
+  where F: Folder<Self::Item> {
+    folder.consume_iter(self.into_iter())
   }
 }
 
@@ -177,7 +180,7 @@ where
     C: Consumer<P::Item>,
   {
     if consumer.full() {
-      unimplemented!()
+      consumer.into_folder().complete()
     } else if splitter.try_split(len, migrated) {
       let mid = len / 2;
       let (left_producer, right_producer) = producer.split_at(mid);
@@ -204,7 +207,7 @@ where
       );
       reducer.reduce(left_result, right_result)
     } else {
-      unimplemented!()
+      producer.fold_with(consumer.into_folder()).complete()
     }
   }
 }

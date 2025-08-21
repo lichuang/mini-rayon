@@ -181,6 +181,13 @@ impl OnceLatch {
   }
 }
 
+impl AsCoreLatch for OnceLatch {
+  #[inline]
+  fn as_core_latch(&self) -> &CoreLatch {
+    &self.core_latch
+  }
+}
+
 pub struct LatchRef<'a, L> {
   inner: *const L,
   marker: PhantomData<&'a L>,

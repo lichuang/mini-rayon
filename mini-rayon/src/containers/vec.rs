@@ -4,9 +4,9 @@ use std::ops::RangeBounds;
 use std::ptr;
 use std::slice;
 
-use crate::ParallelIterator;
 use crate::iter::IntoParallelIteratorator;
 use crate::iter::ParallelDrainRange;
+use crate::iter::ParallelIterator;
 use crate::math::simplify_range;
 use crate::plumbing::Consumer;
 use crate::plumbing::Producer;
@@ -40,8 +40,7 @@ impl<T: Send> ParallelIterator for IntoIter<T> {
 
   fn with_producer<CB: ProducerCallback<Self::Item>>(mut self, callback: CB) -> CB::Output
   where CB: ProducerCallback<Self::Item> {
-    // self.vec.drain(..)
-    unimplemented!()
+    self.vec.par_drain(..).with_producer(callback)
   }
 }
 

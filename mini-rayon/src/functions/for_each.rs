@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use super::noop::NoopReducer;
-use crate::ParallelIterator;
+use crate::iter::ParallelIterator;
 use crate::plumbing::Consumer;
 use crate::plumbing::Folder;
 

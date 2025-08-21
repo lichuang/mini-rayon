@@ -30,13 +30,13 @@ static mut THE_REGISTRY: Option<Arc<Registry>> = None;
 static THE_REGISTRY_SET: Once = Once::new();
 
 pub struct ThreadInfo {
-  primed: LockLatch,
+  pub(crate) primed: LockLatch,
 
-  stopped: LockLatch,
+  pub(crate) stopped: LockLatch,
 
-  terminate: OnceLatch,
+  pub(crate) terminate: OnceLatch,
 
-  pub stealer: Stealer<JobRef>,
+  pub(crate) stealer: Stealer<JobRef>,
 }
 
 impl ThreadInfo {

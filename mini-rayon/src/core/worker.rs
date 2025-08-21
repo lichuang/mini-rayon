@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::mem;
 use std::ptr;
 use std::sync::Arc;
 
@@ -9,7 +10,9 @@ use crossbeam_deque::Worker;
 use super::job::JobRef;
 use super::latch::AsCoreLatch;
 use super::latch::CoreLatch;
+use super::latch::Latch;
 use super::registry::Registry;
+use super::unwind;
 
 thread_local! {
     static WORKER_THREAD_STATE: Cell<*const WorkerThread> = const { Cell::new(ptr::null()) };
@@ -152,8 +155,30 @@ impl WorkerThread {
   pub unsafe fn execute(&self, job: JobRef) {
     job.execute();
   }
+
+  unsafe fn wait_until_out_of_work(&self) {
+    debug_assert_eq!(self as *const _, WorkerThread::current());
+    let registry = &*self.registry;
+    let index = self.index;
+
+    self.wait_until(&registry.thread_infos[index].terminate);
+
+    debug_assert!(self.take_local_job().is_none());
+
+    Latch::set(&registry.thread_infos[index].stopped);
+  }
 }
 
 unsafe fn main_loop(worker: WorkerThread) {
-  unimplemented!()
+  WorkerThread::set_current(&worker);
+  let registry = &*worker.registry;
+  let index = worker.index;
+
+  Latch::set(&registry.thread_infos[index].primed);
+
+  let abort_guard = unwind::AbortIfPanic;
+
+  worker.wait_until_out_of_work();
+
+  mem::forget(abort_guard);
 }
