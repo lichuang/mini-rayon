@@ -29,7 +29,7 @@ impl Default for ThreadPoolBuilder {
 static mut THE_REGISTRY: Option<Arc<Registry>> = None;
 static THE_REGISTRY_SET: Once = Once::new();
 
-struct ThreadInfo {
+pub struct ThreadInfo {
   primed: LockLatch,
 
   stopped: LockLatch,

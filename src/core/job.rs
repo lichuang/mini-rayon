@@ -15,6 +15,7 @@ pub(super) trait Job {
   unsafe fn execute(this: *const ());
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct JobRef {
   pointer: *const (),
   execute_fn: unsafe fn(*const ()),
@@ -29,9 +30,9 @@ impl JobRef {
     }
   }
 
-  pub fn id(&self) -> impl Eq {
-    (self.pointer, self.execute_fn)
-  }
+  // pub fn id(&self) -> impl Eq {
+  // (self.pointer, self.execute_fn)
+  // }
 
   pub unsafe fn execute(&self) {
     (self.execute_fn)(self.pointer)

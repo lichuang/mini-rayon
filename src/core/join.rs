@@ -17,11 +17,18 @@ pub struct FnContext {
 
 impl FnContext {
   #[inline]
-  fn new(migrated: bool) -> Self {
+  pub fn new(migrated: bool) -> Self {
     FnContext {
       migrated,
       _marker: PhantomData,
     }
+  }
+
+  /// Returns `true` if the closure was called from a different thread
+  /// than it was provided from.
+  #[inline]
+  pub fn migrated(&self) -> bool {
+    self.migrated
   }
 }
 
@@ -45,8 +52,8 @@ where
   in_worker(|worker_thread, injected| unsafe {
     let job_b = StackJob::new(call_b(op_b), SpinLatch::new(worker_thread));
     let job_b_ref = job_b.as_job_ref();
-    let job_b_id = job_b_ref.id();
-    worker_thread.push(job_b_ref);
+    // let job_b_id = job_b_ref.id();
+    worker_thread.push(job_b_ref.clone());
 
     let status_a = halt_unwinding(call_a(op_a, injected));
     let result_a = match status_a {
@@ -56,7 +63,7 @@ where
 
     while !job_b.latch.probe() {
       if let Some(job) = worker_thread.take_local_job() {
-        if job_b_id == job.id() {
+        if job_b_ref == job {
           // Found it! Let's run it.
           //
           // Note that this could panic, but it's ok if we unwind here.

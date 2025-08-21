@@ -1,7 +1,8 @@
-use std::iter::Product;
+use anyhow::Result;
 
 use crate::ParallelIterator;
 use crate::core::current_num_threads;
+use crate::core::join_context;
 
 pub trait ProducerCallback<T> {
   type Output;
@@ -10,23 +11,56 @@ pub trait ProducerCallback<T> {
   where P: Producer<Item = T>;
 }
 
-pub trait Producer: Sized {
+pub trait Producer: Sized + Send {
   type Item;
   type IntoIter: Iterator<Item = Self::Item>;
 
   fn into_iter(self) -> Self::IntoIter;
 
   fn split_at(self, index: usize) -> (Self, Self);
+
+  fn min_len(&self) -> usize {
+    1
+  }
+
+  fn max_len(&self) -> usize {
+    usize::MAX
+  }
 }
 
-pub trait Consumer<Item>: Sized {
-  type Result;
+pub trait Consumer<Item>: Sized + Send {
+  type Result: Send;
 
   type Reducer: Reducer<Self::Result>;
+
+  type Folder: Folder<Item, Result = Self::Result>;
 
   fn full(&self) -> bool;
 
   fn split_at(self, index: usize) -> (Self, Self, Self::Reducer);
+
+  fn into_folder(self) -> Self::Folder;
+}
+
+pub trait Folder<Item>: Sized {
+  type Result;
+
+  fn consume(self, item: Item) -> Self;
+
+  fn consume_iter<I>(mut self, iter: I) -> Self
+  where I: IntoIterator<Item = Item> {
+    for item in iter {
+      self = self.consume(item);
+      if self.full() {
+        break;
+      }
+    }
+    self
+  }
+
+  fn complete(self) -> Self::Result;
+
+  fn full(&self) -> bool;
 }
 
 pub trait Reducer<Result> {
@@ -35,6 +69,7 @@ pub trait Reducer<Result> {
   fn reduce(self, left: Result, right: Result) -> Result;
 }
 
+#[derive(Clone, Copy)]
 struct Splitter {
   splits: usize,
 }
@@ -67,6 +102,7 @@ impl Splitter {
   }
 }
 
+#[derive(Clone, Copy)]
 struct LengthSplitter {
   inner: Splitter,
 
@@ -126,6 +162,9 @@ where
   P: Producer,
   C: Consumer<P::Item>,
 {
+  let splitter = LengthSplitter::new(producer.min_len(), producer.max_len(), len);
+  return helper(len, false, splitter, producer, consumer);
+
   fn helper<P, C>(
     len: usize,
     migrated: bool,
@@ -139,8 +178,7 @@ where
   {
     if consumer.full() {
       unimplemented!()
-    }
-    if splitter.try_split(len, migrated) {
+    } else if splitter.try_split(len, migrated) {
       let mid = len / 2;
       let (left_producer, right_producer) = producer.split_at(mid);
       let (left_consumer, right_consumer, reducer) = consumer.split_at(mid);
@@ -164,6 +202,9 @@ where
           )
         },
       );
+      reducer.reduce(left_result, right_result)
+    } else {
+      unimplemented!()
     }
   }
 }
