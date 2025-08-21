@@ -1,0 +1,20 @@
+[package]
+name = "mini-rayon-demo"
+
+version       = { workspace = true }
+edition       = { workspace = true }
+categories    = { workspace = true }
+description = "mini rayon demo"
+homepage      = { workspace = true }
+keywords      = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+
+[dependencies]
+mini-rayon = { path = "../mini-rayon"}
+
+[features]
+default = []
+
+[package.metadata.docs.rs]
+all-features = true

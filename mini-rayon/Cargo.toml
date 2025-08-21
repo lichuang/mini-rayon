@@ -1,0 +1,15 @@
+[package]
+name = "mini-rayon"
+version       = { workspace = true }
+edition       = { workspace = true }
+categories    = { workspace = true }
+description   = { workspace = true }
+homepage      = { workspace = true }
+keywords      = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+
+[dependencies]
+anyhow = "1"
+crossbeam-deque = "0.8.1"
+crossbeam-utils = "0.8.0"

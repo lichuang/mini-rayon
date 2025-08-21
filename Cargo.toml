@@ -1,4 +1,4 @@
-[package]
+[workspace.package]
 name = "mini-rayon"
 version = "0.1.0"
 edition = "2024"
@@ -8,8 +8,10 @@ categories = ["concurrency"]
 license = "Apache-2.0"
 repository = "https://github.com/lichuang/mini-rayon"
 readme = "README.md"
+description = "A simplified implementation of the rayon project to illustrate the implementation principle."
 
-[dependencies]
-anyhow = "1"
-crossbeam-deque = "0.8.1"
-crossbeam-utils = "0.8.0"
+[workspace]
+members = [
+    "mini-rayon",
+    "example",
+]
