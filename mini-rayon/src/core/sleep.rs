@@ -112,47 +112,22 @@ impl Sleep {
     loop {
       let counters = self.counters.load(Ordering::SeqCst);
 
-      // Check if the JEC has changed since we got sleepy.
       debug_assert!(idle_state.jobs_counter.is_sleepy());
       if counters.jobs_counter() != idle_state.jobs_counter {
-        // JEC has changed, so a new job was posted, but for some reason
-        // we didn't see it. We should return to just before the SLEEPY
-        // state so we can do another search and (if we fail to find
-        // work) go back to sleep.
         idle_state.wake_partly();
         latch.wake_up();
         return;
       }
 
-      // Otherwise, let's move from IDLE to SLEEPING.
       if self.counters.try_add_sleeping_thread(counters) {
         break;
       }
     }
 
-    // Successfully registered as asleep.
-
-    // We have one last check for injected jobs to do. This protects against
-    // deadlock in the very unlikely event that
-    //
-    // - an external job is being injected while we are sleepy
-    // - that job triggers the rollover over the JEC such that we don't see it
-    // - we are the last active worker thread
     std::sync::atomic::fence(Ordering::SeqCst);
     if has_injected_jobs() {
-      // If we see an externally injected job, then we have to 'wake
-      // ourselves up'. (Ordinarily, `sub_sleeping_thread` is invoked by
-      // the one that wakes us.)
       self.counters.sub_sleeping_thread();
     } else {
-      // If we don't see an injected job (the normal case), then flag
-      // ourselves as asleep and wait till we are notified.
-      //
-      // (Note that `is_sleep` is held under a mutex and the mutex was
-      // acquired *before* we incremented the "sleepy counter". This means
-      // that whomever is coming to wake us will have to wait until we
-      // release the mutex in the call to `wait`, so they will see this
-      // boolean as true.)
       *is_sleep = true;
       while *is_sleep {
         is_sleep = sleep_state.condvar.wait(is_sleep).unwrap();

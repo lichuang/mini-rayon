@@ -135,10 +135,10 @@ impl LengthSplitter {
   }
 }
 
-pub fn bridge<I, C>(pi: I, consumer: C) -> C::Result
+pub fn bridge<Iter, C>(pi: Iter, consumer: C) -> C::Result
 where
-  I: ParallelIterator,
-  C: Consumer<I::Item>,
+  Iter: ParallelIterator,
+  C: Consumer<Iter::Item>,
 {
   let len = pi.len();
   return pi.with_producer(Callback { len, consumer });

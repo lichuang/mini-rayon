@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::mem;
 use std::ptr;
 use std::sync::Arc;
+use std::thread;
 
 use crossbeam_deque::Steal;
 use crossbeam_deque::Stealer;
@@ -48,10 +49,10 @@ impl WorkerThread {
     }
   }
 
-  pub fn spawn(self) {
-    unsafe {
-      main_loop(self);
-    }
+  pub fn spawn(self) -> anyhow::Result<()> {
+    let mut thread = thread::Builder::new();
+    thread.spawn(|| unsafe { main_loop(self) })?;
+    Ok(())
   }
 
   /// Gets the `WorkerThread` index for the current thread; returns
@@ -107,6 +108,8 @@ impl WorkerThread {
   }
 
   unsafe fn wait_until_cold(&self, latch: &CoreLatch) {
+    let abort_guard = unwind::AbortIfPanic;
+
     while !latch.probe() {
       if let Some(job) = self.take_local_job() {
         self.execute(job);
@@ -114,14 +117,41 @@ impl WorkerThread {
       }
 
       let mut idle_state = self.registry.sleep.start_looking(self.index);
-      while !latch.probe() {}
+      let mut continue_outer = false;
+      while !latch.probe() {
+        if let Some(job) = self.find_work() {
+          self.registry.sleep.work_found();
+          self.execute(job);
+          continue_outer = true;
+          break;
+        } else {
+          self
+            .registry
+            .sleep
+            .no_work_found(&mut idle_state, latch, || self.has_injected_job())
+        }
+      }
+
+      if continue_outer {
+        continue;
+      }
+
+      self.registry.sleep.work_found();
+      break;
     }
+
+    mem::forget(abort_guard);
+  }
+
+  fn has_injected_job(&self) -> bool {
+    !self.stealer.is_empty() || self.registry.has_injected_job()
   }
 
   fn find_work(&self) -> Option<JobRef> {
     self
       .take_local_job()
-      .or_else(|| self.steal().or_else(|| self.registry.pop_injected_job()))
+      .or_else(|| self.steal())
+      .or_else(|| self.registry.pop_injected_job())
   }
 
   fn steal(&self) -> Option<JobRef> {

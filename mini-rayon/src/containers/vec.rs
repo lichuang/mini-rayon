@@ -17,7 +17,7 @@ impl<T: Send> IntoParallelIteratorator for Vec<T> {
   type Item = T;
   type Iter = IntoIter<T>;
 
-  fn par_iter(self) -> Self::Iter {
+  fn into_par_iter(self) -> Self::Iter {
     IntoIter { vec: self }
   }
 }
@@ -50,7 +50,6 @@ impl<'data, T: Send> ParallelDrainRange<usize> for &'data mut Vec<T> {
 
   fn par_drain<R: RangeBounds<usize>>(self, range: R) -> Self::Iter {
     Drain {
-      orig_len: self.len(),
       range: simplify_range(range, self.len()),
       vec: self,
     }
@@ -60,7 +59,6 @@ impl<'data, T: Send> ParallelDrainRange<usize> for &'data mut Vec<T> {
 pub struct Drain<'data, T: Send> {
   vec: &'data mut Vec<T>,
   range: Range<usize>,
-  orig_len: usize,
 }
 
 impl<'data, T: Send> ParallelIterator for Drain<'data, T> {

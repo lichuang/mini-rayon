@@ -77,9 +77,13 @@ impl Registry {
     for (index, worker) in workers.into_iter().enumerate() {
       let worker = WorkerThread::new(worker, Arc::clone(&registry), index);
 
-      worker.spawn();
+      worker.spawn()?;
     }
     Ok(registry)
+  }
+
+  pub fn has_injected_job(&self) -> bool {
+    !self.injected_jobs.is_empty()
   }
 
   fn inject(&self, injected_job: JobRef) {

@@ -5,9 +5,9 @@ use crate::iter::ParallelIterator;
 use crate::plumbing::Consumer;
 use crate::plumbing::Folder;
 
-pub fn for_each<I, F, T>(pi: I, op: &F)
+pub fn for_each<Iter, F, T>(pi: Iter, op: &F)
 where
-  I: ParallelIterator<Item = T>,
+  Iter: ParallelIterator<Item = T>,
   F: Fn(T) + Sync,
   T: Send,
 {

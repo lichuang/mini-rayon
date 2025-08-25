@@ -8,7 +8,7 @@ pub trait IntoParallelIteratorator {
   type Item;
   type Iter: ParallelIterator<Item = Self::Item>;
 
-  fn par_iter(self) -> Self::Iter;
+  fn into_par_iter(self) -> Self::Iter;
 }
 
 pub trait ParallelIterator: Sized + Send {
@@ -21,12 +21,23 @@ pub trait ParallelIterator: Sized + Send {
 
   fn len(&self) -> usize;
 
-  fn drive<C>(self, c: C) -> C::Result
+  /// Internal method used to define the behavior of this parallel
+  /// iterator. You should not need to call this directly.
+  ///
+  /// This method causes the iterator `self` to start producing
+  /// items and to feed them to the consumer `consumer` one by one.
+  /// It may split the consumer before doing so to create the
+  /// opportunity to produce in parallel. If a split does happen, it
+  /// will inform the consumer of the index where the split should
+  /// occur.
+  fn drive<C>(self, consumer: C) -> C::Result
   where C: Consumer<Self::Item>;
 
   fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output;
 }
 
+/// `ParallelDrainRange` creates a parallel iterator that moves a range of items
+/// from a collection while retaining the original capacity.
 pub trait ParallelDrainRange<Idx = usize> {
   type Iter: ParallelIterator<Item = Self::Item>;
 
